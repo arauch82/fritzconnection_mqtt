@@ -3,6 +3,7 @@
 import argparse
 import logging
 import time
+import datetime
 from fritzconnection import FritzConnection
 import paho.mqtt.client as mqtt
 
@@ -10,9 +11,11 @@ fritzconnection = None
 mqtt_topic = None
 mqtt_string = None
 fritzbox_phone = None
+last_received = None
 
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, flags, rc):
+    global mqtt_topic
     logging.info("Connected with result code "+str(rc))
 
     # Subscribing in on_connect() means that if we lose the connection and
@@ -21,12 +24,17 @@ def on_connect(client, userdata, flags, rc):
 
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
+    global fritzconnection
+    global mqtt_string
+    global fritzbox_phone
+    global last_received    
     logging.info(msg.topic+" "+str(msg.payload))
-    if msg.payload.decode('utf-8') == mqtt_string:
+    if msg.payload.decode('utf-8') == mqtt_string and last_received < datetime.datetime.now()-datetime.timedelta(seconds=11):
+        last_received = datetime.datetime.now()
         logging.info("Code received, trigger Fritzbox call!")
         arg = {'NewX_AVM-DE_PhoneNumber': fritzbox_phone}
         fritz_connection.call_action('X_VoIP1', 'X_AVM-DE_DialNumber', arguments=arg)
-        time.sleep(5)
+        time.sleep(10)
         fritz_connection.call_action('X_VoIP1', 'X_AVM-DE_DialHangup')
 
 logging.basicConfig(level=logging.INFO, datefmt='%Y-%m-%d %H:%M:%S',
@@ -50,6 +58,7 @@ args = parser.parse_args()
 mqtt_topic = args.mqtt_topic
 mqtt_string = args.mqtt_string
 fritzbox_phone = args.fritzbox_phone
+last_received = datetime.datetime.now()
 
 fritz_connection = FritzConnection(address=args.fritzbox_ip, password=args.fritzbox_password)
 logging.info("Established connection to Fritzbox")
